@@ -123,19 +123,12 @@
       color:rgba(17,17,17,.34); font-size:11px; font-weight:650; white-space:nowrap; pointer-events:none; transition:opacity .3s ease;
     }
     .hint.hide { opacity:0; }
-    .side-flash { position:absolute; z-index:2; top:0; bottom:0; width:50%; opacity:0; pointer-events:none; transition:opacity .08s linear; }
-    #leftFlash { left:0; background:linear-gradient(90deg, rgba(17,17,17,.055), transparent); }
-    #rightFlash { right:0; background:linear-gradient(270deg, rgba(17,17,17,.055), transparent); }
-    .side-flash.on { opacity:1; }
     @media (prefers-reduced-motion: reduce) { * { animation:none!important; transition:none!important; } }
   </style>
 </head>
 <body>
   <main id="app" aria-label="NEXT Jump game">
-    <canvas id="game" aria-label="NEXT Jump gameplay. Hold the left or right side of the screen to move."></canvas>
-    <div id="leftFlash" class="side-flash"></div>
-    <div id="rightFlash" class="side-flash"></div>
-
+    <canvas id="game" aria-label="NEXT Jump gameplay. Drag your finger horizontally to steer."></canvas>
     <div class="hud">
       <div class="pill" aria-live="polite">
         <span class="score-value" id="score">0</span>
@@ -146,15 +139,15 @@
       </button>
     </div>
 
-    <div id="hint" class="hint">HOLD LEFT / RIGHT TO MOVE</div>
+    <div id="hint" class="hint">DRAG YOUR FINGER TO STEER</div>
 
     <section id="startOverlay" class="overlay">
       <div class="card">
         <div class="mark" aria-hidden="true"><div class="face"><div class="smile"></div></div></div>
         <h1>NEXT<br>Jump</h1>
-        <p class="sub">One thumb. Endless climb. Hold the left or right half of the screen and keep moving up.</p>
+        <p class="sub">One thumb. Endless climb. Drag left and right — the character follows your finger.</p>
         <button id="startBtn" class="primary" type="button">Play</button>
-        <div class="micro">v0.1 · built for mobile Safari</div>
+        <div class="micro">v0.2 · precision touch physics</div>
       </div>
     </section>
 
@@ -165,7 +158,7 @@
         <div id="newBest" class="newbest">NEW BEST</div>
         <p id="deathCopy" class="sub">That was close.</p>
         <button id="restartBtn" class="primary" type="button">Play again</button>
-        <div class="micro">Tap and hold either side to steer</div>
+        <div class="micro">Drag anywhere on the playfield to steer</div>
       </div>
     </section>
   </main>
@@ -189,18 +182,18 @@
   const pauseBtn = document.getElementById('pauseBtn');
   const pauseIcon = document.getElementById('pauseIcon');
   const hint = document.getElementById('hint');
-  const leftFlash = document.getElementById('leftFlash');
-  const rightFlash = document.getElementById('rightFlash');
 
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const TAU = Math.PI * 2;
   const FIXED_DT = 1 / 120;
-  const GRAVITY = 1960;
-  const JUMP_SPEED = 790;
-  const BOOST_SPEED = 930;
-  const RUN_SPEED = 315;
-  const AIR_ACCEL = 2250;
-  const FRICTION = 0.84;
+  const GRAVITY = 1900;
+  const JUMP_SPEED = 700;
+  const BOOST_SPEED = 835;
+  const KEYBOARD_SPEED = 360;
+  const TOUCH_MAX_SPEED = 520;
+  const TOUCH_ACCEL = 8200;
+  const KEYBOARD_ACCEL = 3400;
+  const FRICTION = 0.78;
   const PLAYER_R = 20;
 
   let cssW = 390;
@@ -221,8 +214,14 @@
   let shake = 0;
   let particles = [];
   let platforms = [];
-  let pressed = new Map();
+  let activePointerId = null;
+  let touching = false;
+  let touchX = cssW / 2;
+  let touchVX = 0;
+  let lastTouchX = cssW / 2;
+  let lastTouchTime = 0;
   let keyboardDir = 0;
+  let gameTime = 0;
   let audioCtx = null;
   let hasMoved = false;
 
@@ -248,49 +247,63 @@
   function lerp(a, b, t) { return a + (b - a) * t; }
 
   function currentDirection() {
-    if (keyboardDir) return keyboardDir;
-    let sum = 0;
-    for (const dir of pressed.values()) sum += dir;
-    return Math.sign(sum);
+    return keyboardDir;
   }
 
   function setFlash() {
-    const d = currentDirection();
-    leftFlash.classList.toggle('on', d < 0);
-    rightFlash.classList.toggle('on', d > 0);
-    if (d && !hasMoved) {
+    if ((touching || keyboardDir) && !hasMoved) {
       hasMoved = true;
       hint.classList.add('hide');
     }
   }
 
-  function pointerDirection(clientX) {
+  function pointerX(clientX) {
     const r = canvas.getBoundingClientRect();
-    return clientX < r.left + r.width / 2 ? -1 : 1;
+    return clamp(clientX - r.left, PLAYER_R + 2, r.width - PLAYER_R - 2);
+  }
+
+  function updateTouch(clientX, timeStamp) {
+    const x = pointerX(clientX);
+    const t = (timeStamp || performance.now()) / 1000;
+    const dt = Math.max(1 / 240, t - lastTouchTime);
+    const instantVX = (x - lastTouchX) / dt;
+    touchVX = lerp(touchVX, clamp(instantVX, -1200, 1200), .32);
+    touchX = x;
+    lastTouchX = x;
+    lastTouchTime = t;
+    setFlash();
   }
 
   canvas.addEventListener('pointerdown', (e) => {
-    if (state !== 'playing') return;
+    if (state !== 'playing' || activePointerId !== null) return;
     e.preventDefault();
+    activePointerId = e.pointerId;
+    touching = true;
+    const x = pointerX(e.clientX);
+    touchX = x;
+    lastTouchX = x;
+    lastTouchTime = (e.timeStamp || performance.now()) / 1000;
+    touchVX = 0;
     canvas.setPointerCapture?.(e.pointerId);
-    pressed.set(e.pointerId, pointerDirection(e.clientX));
     setFlash();
     unlockAudio();
   }, { passive: false });
 
   canvas.addEventListener('pointermove', (e) => {
-    if (!pressed.has(e.pointerId)) return;
+    if (!touching || e.pointerId !== activePointerId) return;
     e.preventDefault();
-    pressed.set(e.pointerId, pointerDirection(e.clientX));
-    setFlash();
+    updateTouch(e.clientX, e.timeStamp);
   }, { passive: false });
 
   function releasePointer(e) {
-    pressed.delete(e.pointerId);
-    setFlash();
+    if (e.pointerId !== activePointerId) return;
+    touching = false;
+    activePointerId = null;
+    touchVX *= .2;
   }
   canvas.addEventListener('pointerup', releasePointer);
   canvas.addEventListener('pointercancel', releasePointer);
+  canvas.addEventListener('lostpointercapture', releasePointer);
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   window.addEventListener('keydown', (e) => {
@@ -347,9 +360,9 @@
 
   function generateNextPlatform() {
     const progress = Math.max(0, lastGeneratedY - 80);
-    const gapY = clamp(rand(74, 105) + progress * 0.004, 74, 118);
-    const width = clamp(rand(88, 136) - progress * 0.003, 72, 136);
-    const maxSide = clamp(90 + gapY * .55, 110, Math.min(180, cssW * .44));
+    const gapY = clamp(rand(70, 96) + progress * 0.0032, 70, 108);
+    const width = clamp(rand(102, 146) - progress * 0.0025, 82, 146);
+    const maxSide = clamp(76 + gapY * .42, 96, Math.min(148, cssW * .38));
     const nextY = lastGeneratedY + gapY;
     let center = lastGeneratedX + rand(-maxSide, maxSide);
     center = clamp(center, 36 + width / 2, cssW - 36 - width / 2);
@@ -372,8 +385,8 @@
   }
 
   function resetGame() {
-    pressed.clear(); keyboardDir = 0; setFlash();
-    score = 0; maxHeight = 70; landedCount = 0; shake = 0; hasMoved = false;
+    activePointerId = null; touching = false; touchVX = 0; touchX = cssW / 2; keyboardDir = 0; setFlash();
+    score = 0; maxHeight = 70; landedCount = 0; shake = 0; hasMoved = false; gameTime = 0;
     scoreEl.textContent = '0';
     hint.classList.remove('hide');
     cameraY = 0;
@@ -402,7 +415,7 @@
   function endGame() {
     if (state === 'gameover') return;
     state = 'gameover';
-    pressed.clear(); keyboardDir = 0; setFlash();
+    activePointerId = null; touching = false; touchVX = 0; keyboardDir = 0; setFlash();
     const wasBest = score > best;
     if (wasBest) {
       best = score;
@@ -421,7 +434,7 @@
     if (state === 'playing') {
       state = 'paused';
       pauseIcon.textContent = '▶';
-      pressed.clear(); keyboardDir = 0; setFlash();
+      activePointerId = null; touching = false; touchVX = 0; keyboardDir = 0; setFlash();
     } else if (state === 'paused') {
       state = 'playing';
       pauseIcon.textContent = 'Ⅱ';
@@ -454,14 +467,26 @@
   }
 
   function step(dt) {
-    const dir = currentDirection();
-    if (dir) {
-      player.vx += dir * AIR_ACCEL * dt;
-      player.vx = clamp(player.vx, -RUN_SPEED, RUN_SPEED);
+    gameTime += dt;
+
+    if (touching) {
+      const error = touchX - player.x;
+      const desiredVX = clamp(error * 18 + touchVX * .10, -TOUCH_MAX_SPEED, TOUCH_MAX_SPEED);
+      const maxChange = TOUCH_ACCEL * dt;
+      player.vx += clamp(desiredVX - player.vx, -maxChange, maxChange);
+      if (Math.abs(error) < 2.5 && Math.abs(touchVX) < 30) player.vx *= .64;
     } else {
-      player.vx *= Math.pow(FRICTION, dt * 60);
-      if (Math.abs(player.vx) < 2) player.vx = 0;
+      const dir = currentDirection();
+      if (dir) {
+        player.vx += dir * KEYBOARD_ACCEL * dt;
+        player.vx = clamp(player.vx, -KEYBOARD_SPEED, KEYBOARD_SPEED);
+      } else {
+        player.vx *= Math.pow(FRICTION, dt * 60);
+        if (Math.abs(player.vx) < 2) player.vx = 0;
+      }
     }
+
+    touchVX *= Math.pow(.08, dt);
 
     const prevY = player.y;
     const prevFoot = prevY - PLAYER_R;
@@ -469,10 +494,10 @@
     player.x += player.vx * dt;
     player.y += player.vy * dt;
 
-    if (player.x < -PLAYER_R) player.x = cssW + PLAYER_R;
-    if (player.x > cssW + PLAYER_R) player.x = -PLAYER_R;
+    if (player.x < PLAYER_R) { player.x = PLAYER_R; player.vx = Math.max(0, player.vx) * .25; }
+    if (player.x > cssW - PLAYER_R) { player.x = cssW - PLAYER_R; player.vx = Math.min(0, player.vx) * .25; }
 
-    const now = performance.now() / 1000;
+    const now = gameTime;
     for (const p of platforms) {
       if (p.type === 'moving') p.x = p.baseX + Math.sin(now * 1.45 + p.phase) * p.amp;
       if (p.cracked && !p.dead && now >= p.crackAt) p.dead = true;
@@ -527,7 +552,7 @@
     particles = particles.filter(p => p.age < p.life);
 
     player.squish = Math.max(0, player.squish - dt * 6.8);
-    player.tilt = lerp(player.tilt, clamp(player.vx / RUN_SPEED, -1, 1) * .12, 1 - Math.pow(.0008, dt));
+    player.tilt = lerp(player.tilt, clamp(player.vx / TOUCH_MAX_SPEED, -1, 1) * .10, 1 - Math.pow(.0008, dt));
     shake *= Math.pow(.02, dt);
 
     if (player.y < cameraY - 90) endGame();
@@ -647,6 +672,24 @@
     ctx.restore();
   }
 
+  function drawTouchGuide() {
+    if (!touching || state !== 'playing') return;
+    const y = cssH - Math.max(38, (window.visualViewport ? 20 : 20));
+    ctx.save();
+    ctx.globalAlpha = .32;
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(touchX, y, 10, 0, TAU);
+    ctx.stroke();
+    ctx.globalAlpha = .12;
+    ctx.beginPath();
+    ctx.moveTo(touchX, y - 17);
+    ctx.lineTo(touchX, y - 44);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function draw() {
     const sx = reduceMotion ? 0 : rand(-shake, shake);
     const sy = reduceMotion ? 0 : rand(-shake, shake);
@@ -657,6 +700,7 @@
     drawPlatforms();
     drawParticles();
     drawPlayer();
+    drawTouchGuide();
     ctx.restore();
   }
 
