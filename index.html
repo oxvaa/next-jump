@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#f4f4f2" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="NEXT Jump" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <title>NEXT Jump</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f4f2;
+      --ink: #111111;
+      --muted: rgba(17,17,17,.48);
+      --glass: rgba(255,255,255,.66);
+      --line: rgba(17,17,17,.08);
+      --shadow: 0 18px 50px rgba(0,0,0,.10);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; width: 100%; min-height: 100%; background: var(--bg); overflow: hidden; overscroll-behavior: none; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, system-ui, sans-serif;
+      color: var(--ink);
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: none;
+    }
+    button { font: inherit; color: inherit; }
+    #app {
+      position: relative;
+      width: 100vw;
+      height: 100dvh;
+      min-height: 100svh;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(255,255,255,.92), transparent 31%),
+        linear-gradient(180deg, #f7f7f4 0%, #eeeeeb 100%);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    .hud {
+      position: absolute;
+      z-index: 5;
+      top: max(14px, env(safe-area-inset-top));
+      left: 14px;
+      right: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+    .pill {
+      min-height: 44px;
+      padding: 8px 13px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      border: 1px solid rgba(255,255,255,.84);
+      border-radius: 999px;
+      background: var(--glass);
+      backdrop-filter: blur(22px) saturate(1.35);
+      -webkit-backdrop-filter: blur(22px) saturate(1.35);
+      box-shadow: 0 8px 28px rgba(0,0,0,.07);
+    }
+    .score-value { font-size: 18px; font-weight: 750; letter-spacing: -.04em; min-width: 34px; }
+    .best { font-size: 11px; font-weight: 650; color: var(--muted); letter-spacing: .02em; text-transform: uppercase; }
+    .hud button { pointer-events: auto; }
+    .icon-btn {
+      width: 44px; height: 44px; border: 1px solid rgba(255,255,255,.84); border-radius: 50%;
+      background: var(--glass); backdrop-filter: blur(22px) saturate(1.35); -webkit-backdrop-filter: blur(22px) saturate(1.35);
+      box-shadow: 0 8px 28px rgba(0,0,0,.07); display: grid; place-items: center; cursor: pointer;
+    }
+    .icon-btn:active { transform: scale(.94); }
+    .overlay {
+      position: absolute; z-index: 10; inset: 0; display: grid; place-items: center;
+      padding: max(22px, env(safe-area-inset-top)) 22px max(26px, env(safe-area-inset-bottom));
+      background: rgba(244,244,242,.28);
+      backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+      transition: opacity .22s ease, visibility .22s ease;
+    }
+    .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    .card {
+      width: min(100%, 390px);
+      border: 1px solid rgba(255,255,255,.92);
+      border-radius: 32px;
+      background: rgba(255,255,255,.78);
+      backdrop-filter: blur(28px) saturate(1.35); -webkit-backdrop-filter: blur(28px) saturate(1.35);
+      box-shadow: var(--shadow);
+      padding: 28px 24px 22px;
+      text-align: center;
+    }
+    .mark {
+      width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 26px; background: #111;
+      display: grid; place-items: center; box-shadow: 0 14px 26px rgba(0,0,0,.18);
+    }
+    .face { width: 48px; height: 48px; position: relative; }
+    .face:before, .face:after { content: ""; position:absolute; width:8px; height:10px; border-radius:50%; background:#fff; top:14px; }
+    .face:before { left:10px; } .face:after { right:10px; }
+    .smile { position:absolute; left:12px; right:12px; bottom:9px; height:10px; border-bottom:3px solid #fff; border-radius:0 0 20px 20px; }
+    h1 { margin: 0; font-size: clamp(32px, 9vw, 46px); line-height: .96; letter-spacing: -.065em; font-weight: 800; }
+    .sub { margin: 12px auto 22px; max-width: 290px; font-size: 14px; line-height: 1.45; color: var(--muted); }
+    .primary {
+      width: 100%; min-height: 54px; border: 0; border-radius: 18px; background: #111; color: #fff; font-weight: 720;
+      font-size: 16px; cursor: pointer; box-shadow: 0 10px 22px rgba(0,0,0,.12); transition: transform .12s ease;
+    }
+    .primary:active { transform: scale(.98); }
+    .micro { margin-top: 14px; font-size: 11px; color: var(--muted); }
+    .run-result { margin: 8px 0 4px; font-size: 64px; line-height: 1; font-weight: 800; letter-spacing: -.07em; }
+    .result-label { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+    .newbest { display:none; margin: 10px auto 0; width:max-content; padding:6px 10px; border-radius:999px; background:#111; color:#fff; font-size:11px; font-weight:750; letter-spacing:.06em; }
+    .newbest.show { display:block; }
+    .hint {
+      position:absolute; z-index:4; left:50%; bottom:max(18px, env(safe-area-inset-bottom)); transform:translateX(-50%);
+      color:rgba(17,17,17,.34); font-size:11px; font-weight:650; white-space:nowrap; pointer-events:none; transition:opacity .3s ease;
+    }
+    .hint.hide { opacity:0; }
+    .side-flash { position:absolute; z-index:2; top:0; bottom:0; width:50%; opacity:0; pointer-events:none; transition:opacity .08s linear; }
+    #leftFlash { left:0; background:linear-gradient(90deg, rgba(17,17,17,.055), transparent); }
+    #rightFlash { right:0; background:linear-gradient(270deg, rgba(17,17,17,.055), transparent); }
+    .side-flash.on { opacity:1; }
+    @media (prefers-reduced-motion: reduce) { * { animation:none!important; transition:none!important; } }
+  </style>
+</head>
+<body>
+  <main id="app" aria-label="NEXT Jump game">
+    <canvas id="game" aria-label="NEXT Jump gameplay. Hold the left or right side of the screen to move."></canvas>
+    <div id="leftFlash" class="side-flash"></div>
+    <div id="rightFlash" class="side-flash"></div>
+
+    <div class="hud">
+      <div class="pill" aria-live="polite">
+        <span class="score-value" id="score">0</span>
+        <span class="best">BEST <span id="best">0</span></span>
+      </div>
+      <button id="pauseBtn" class="icon-btn" type="button" aria-label="Pause game">
+        <span id="pauseIcon" aria-hidden="true">Ⅱ</span>
+      </button>
+    </div>
+
+    <div id="hint" class="hint">HOLD LEFT / RIGHT TO MOVE</div>
+
+    <section id="startOverlay" class="overlay">
+      <div class="card">
+        <div class="mark" aria-hidden="true"><div class="face"><div class="smile"></div></div></div>
+        <h1>NEXT<br>Jump</h1>
+        <p class="sub">One thumb. Endless climb. Hold the left or right half of the screen and keep moving up.</p>
+        <button id="startBtn" class="primary" type="button">Play</button>
+        <div class="micro">v0.1 · built for mobile Safari</div>
+      </div>
+    </section>
+
+    <section id="gameOverOverlay" class="overlay hidden">
+      <div class="card">
+        <div class="result-label">Score</div>
+        <div id="finalScore" class="run-result">0</div>
+        <div id="newBest" class="newbest">NEW BEST</div>
+        <p id="deathCopy" class="sub">That was close.</p>
+        <button id="restartBtn" class="primary" type="button">Play again</button>
+        <div class="micro">Tap and hold either side to steer</div>
+      </div>
+    </section>
+  </main>
+
+<script>
+(() => {
+  'use strict';
+
+  const app = document.getElementById('app');
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const startOverlay = document.getElementById('startOverlay');
+  const gameOverOverlay = document.getElementById('gameOverOverlay');
+  const finalScoreEl = document.getElementById('finalScore');
+  const newBestEl = document.getElementById('newBest');
+  const deathCopyEl = document.getElementById('deathCopy');
+  const startBtn = document.getElementById('startBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const pauseIcon = document.getElementById('pauseIcon');
+  const hint = document.getElementById('hint');
+  const leftFlash = document.getElementById('leftFlash');
+  const rightFlash = document.getElementById('rightFlash');
+
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const TAU = Math.PI * 2;
+  const FIXED_DT = 1 / 120;
+  const GRAVITY = 1960;
+  const JUMP_SPEED = 790;
+  const BOOST_SPEED = 930;
+  const RUN_SPEED = 315;
+  const AIR_ACCEL = 2250;
+  const FRICTION = 0.84;
+  const PLAYER_R = 20;
+
+  let cssW = 390;
+  let cssH = 844;
+  let dpr = 1;
+  let state = 'menu';
+  let lastTime = 0;
+  let accumulator = 0;
+  let raf = 0;
+  let cameraY = 0;
+  let score = 0;
+  let maxHeight = 0;
+  let best = Number(localStorage.getItem('nextJumpBest') || 0);
+  let nextPlatformId = 1;
+  let lastGeneratedY = 0;
+  let lastGeneratedX = 0;
+  let landedCount = 0;
+  let shake = 0;
+  let particles = [];
+  let platforms = [];
+  let pressed = new Map();
+  let keyboardDir = 0;
+  let audioCtx = null;
+  let hasMoved = false;
+
+  const player = { x: 0, y: 0, vx: 0, vy: 0, squish: 0, tilt: 0 };
+
+  bestEl.textContent = String(best);
+
+  function resize() {
+    const rect = app.getBoundingClientRect();
+    cssW = Math.max(280, rect.width);
+    cssH = Math.max(480, rect.height);
+    dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (state === 'menu') draw();
+  }
+
+  function rand(min, max) { return min + Math.random() * (max - min); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function currentDirection() {
+    if (keyboardDir) return keyboardDir;
+    let sum = 0;
+    for (const dir of pressed.values()) sum += dir;
+    return Math.sign(sum);
+  }
+
+  function setFlash() {
+    const d = currentDirection();
+    leftFlash.classList.toggle('on', d < 0);
+    rightFlash.classList.toggle('on', d > 0);
+    if (d && !hasMoved) {
+      hasMoved = true;
+      hint.classList.add('hide');
+    }
+  }
+
+  function pointerDirection(clientX) {
+    const r = canvas.getBoundingClientRect();
+    return clientX < r.left + r.width / 2 ? -1 : 1;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (state !== 'playing') return;
+    e.preventDefault();
+    canvas.setPointerCapture?.(e.pointerId);
+    pressed.set(e.pointerId, pointerDirection(e.clientX));
+    setFlash();
+    unlockAudio();
+  }, { passive: false });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pressed.has(e.pointerId)) return;
+    e.preventDefault();
+    pressed.set(e.pointerId, pointerDirection(e.clientX));
+    setFlash();
+  }, { passive: false });
+
+  function releasePointer(e) {
+    pressed.delete(e.pointerId);
+    setFlash();
+  }
+  canvas.addEventListener('pointerup', releasePointer);
+  canvas.addEventListener('pointercancel', releasePointer);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') keyboardDir = -1;
+    if (e.key === 'ArrowRight' || e.key === 'd') keyboardDir = 1;
+    if (e.key === ' ' && state === 'playing') togglePause();
+    setFlash();
+  });
+  window.addEventListener('keyup', (e) => {
+    if ((e.key === 'ArrowLeft' || e.key === 'a') && keyboardDir < 0) keyboardDir = 0;
+    if ((e.key === 'ArrowRight' || e.key === 'd') && keyboardDir > 0) keyboardDir = 0;
+    setFlash();
+  });
+
+  function unlockAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx?.state === 'suspended') audioCtx.resume().catch(() => {});
+  }
+
+  function blip(freq = 420, duration = .045, gain = .025) {
+    if (!audioCtx) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      g.gain.setValueAtTime(gain, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime + duration);
+      osc.connect(g).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    } catch (_) {}
+  }
+
+  function chooseType(height) {
+    if (height < 700) return 'normal';
+    const r = Math.random();
+    if (height > 1500 && r < .08) return 'boost';
+    if (height > 1000 && r < .18) return 'crumble';
+    if (height > 850 && r < .30) return 'moving';
+    return 'normal';
+  }
+
+  function addPlatform(y, x, w, type = 'normal') {
+    platforms.push({
+      id: nextPlatformId++, x, baseX: x, y, w, h: 12, type,
+      phase: rand(0, TAU), amp: type === 'moving' ? rand(28, 54) : 0,
+      cracked: false, crackAt: 0, dead: false
+    });
+  }
+
+  function generateNextPlatform() {
+    const progress = Math.max(0, lastGeneratedY - 80);
+    const gapY = clamp(rand(74, 105) + progress * 0.004, 74, 118);
+    const width = clamp(rand(88, 136) - progress * 0.003, 72, 136);
+    const maxSide = clamp(90 + gapY * .55, 110, Math.min(180, cssW * .44));
+    const nextY = lastGeneratedY + gapY;
+    let center = lastGeneratedX + rand(-maxSide, maxSide);
+    center = clamp(center, 36 + width / 2, cssW - 36 - width / 2);
+    const type = chooseType(nextY);
+    addPlatform(nextY, center - width / 2, width, type);
+    lastGeneratedY = nextY;
+    lastGeneratedX = center;
+  }
+
+  function seedWorld() {
+    platforms = [];
+    particles = [];
+    nextPlatformId = 1;
+    const starterW = Math.min(160, cssW * .42);
+    const starterX = cssW / 2 - starterW / 2;
+    addPlatform(70, starterX, starterW, 'normal');
+    lastGeneratedY = 70;
+    lastGeneratedX = cssW / 2;
+    for (let i = 0; i < 18; i++) generateNextPlatform();
+  }
+
+  function resetGame() {
+    pressed.clear(); keyboardDir = 0; setFlash();
+    score = 0; maxHeight = 70; landedCount = 0; shake = 0; hasMoved = false;
+    scoreEl.textContent = '0';
+    hint.classList.remove('hide');
+    cameraY = 0;
+    seedWorld();
+    player.x = cssW / 2;
+    player.y = 70 + PLAYER_R;
+    player.vx = 0;
+    player.vy = JUMP_SPEED;
+    player.squish = 0;
+    player.tilt = 0;
+  }
+
+  function startGame() {
+    unlockAudio();
+    resetGame();
+    startOverlay.classList.add('hidden');
+    gameOverOverlay.classList.add('hidden');
+    pauseIcon.textContent = 'Ⅱ';
+    state = 'playing';
+    lastTime = performance.now();
+    accumulator = 0;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(frame);
+  }
+
+  function endGame() {
+    if (state === 'gameover') return;
+    state = 'gameover';
+    pressed.clear(); keyboardDir = 0; setFlash();
+    const wasBest = score > best;
+    if (wasBest) {
+      best = score;
+      localStorage.setItem('nextJumpBest', String(best));
+      bestEl.textContent = String(best);
+    }
+    finalScoreEl.textContent = String(score);
+    newBestEl.classList.toggle('show', wasBest && score > 0);
+    const copies = ['That was close.', 'One more run.', 'You had that.', 'Higher this time.', 'Again? Obviously.'];
+    deathCopyEl.textContent = copies[Math.floor(Math.random() * copies.length)];
+    gameOverOverlay.classList.remove('hidden');
+    blip(130, .13, .035);
+  }
+
+  function togglePause() {
+    if (state === 'playing') {
+      state = 'paused';
+      pauseIcon.textContent = '▶';
+      pressed.clear(); keyboardDir = 0; setFlash();
+    } else if (state === 'paused') {
+      state = 'playing';
+      pauseIcon.textContent = 'Ⅱ';
+      lastTime = performance.now();
+      accumulator = 0;
+      raf = requestAnimationFrame(frame);
+    }
+  }
+
+  pauseBtn.addEventListener('click', () => {
+    unlockAudio();
+    togglePause();
+  });
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', startGame);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'playing') togglePause();
+  });
+
+  function spawnLandingParticles(x, y, type) {
+    const count = reduceMotion ? 3 : 8;
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: x + rand(-16,16), y: y + rand(0,5),
+        vx: rand(-90,90), vy: rand(70,180), life: rand(.22,.42), age:0,
+        type
+      });
+    }
+  }
+
+  function step(dt) {
+    const dir = currentDirection();
+    if (dir) {
+      player.vx += dir * AIR_ACCEL * dt;
+      player.vx = clamp(player.vx, -RUN_SPEED, RUN_SPEED);
+    } else {
+      player.vx *= Math.pow(FRICTION, dt * 60);
+      if (Math.abs(player.vx) < 2) player.vx = 0;
+    }
+
+    const prevY = player.y;
+    const prevFoot = prevY - PLAYER_R;
+    player.vy -= GRAVITY * dt;
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    if (player.x < -PLAYER_R) player.x = cssW + PLAYER_R;
+    if (player.x > cssW + PLAYER_R) player.x = -PLAYER_R;
+
+    const now = performance.now() / 1000;
+    for (const p of platforms) {
+      if (p.type === 'moving') p.x = p.baseX + Math.sin(now * 1.45 + p.phase) * p.amp;
+      if (p.cracked && !p.dead && now >= p.crackAt) p.dead = true;
+    }
+
+    const foot = player.y - PLAYER_R;
+    if (player.vy <= 0) {
+      let landing = null;
+      for (const p of platforms) {
+        if (p.dead) continue;
+        const crossed = prevFoot >= p.y && foot <= p.y;
+        const overlap = player.x + PLAYER_R * .72 > p.x && player.x - PLAYER_R * .72 < p.x + p.w;
+        if (crossed && overlap && (!landing || p.y > landing.y)) landing = p;
+      }
+      if (landing) {
+        player.y = landing.y + PLAYER_R;
+        player.vy = landing.type === 'boost' ? BOOST_SPEED : JUMP_SPEED;
+        player.squish = 1;
+        landedCount++;
+        shake = landing.type === 'boost' ? 5 : 2.4;
+        if (landing.type === 'crumble') {
+          landing.cracked = true;
+          landing.crackAt = now + .26;
+        }
+        spawnLandingParticles(player.x, landing.y, landing.type);
+        blip(landing.type === 'boost' ? 690 : 440 + Math.min(180, landedCount * 3), .04, .018);
+      }
+    }
+
+    maxHeight = Math.max(maxHeight, player.y);
+    const newScore = Math.max(0, Math.floor((maxHeight - 70) / 10));
+    if (newScore !== score) {
+      score = newScore;
+      scoreEl.textContent = String(score);
+    }
+
+    const followLine = cameraY + cssH * .62;
+    if (player.y > followLine) {
+      const target = player.y - cssH * .62;
+      cameraY = lerp(cameraY, target, 1 - Math.pow(.0005, dt));
+    }
+
+    while (lastGeneratedY < cameraY + cssH + 260) generateNextPlatform();
+    platforms = platforms.filter(p => !p.dead && p.y > cameraY - 100);
+
+    for (const pt of particles) {
+      pt.age += dt;
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.vy -= 1200 * dt;
+    }
+    particles = particles.filter(p => p.age < p.life);
+
+    player.squish = Math.max(0, player.squish - dt * 6.8);
+    player.tilt = lerp(player.tilt, clamp(player.vx / RUN_SPEED, -1, 1) * .12, 1 - Math.pow(.0008, dt));
+    shake *= Math.pow(.02, dt);
+
+    if (player.y < cameraY - 90) endGame();
+  }
+
+  function roundedRect(x, y, w, h, r) {
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  function platformScreenY(p) { return cssH - (p.y - cameraY); }
+
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0,0,0,cssH);
+    g.addColorStop(0,'#f8f8f5');
+    g.addColorStop(1,'#ecece9');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,cssW,cssH);
+
+    ctx.save();
+    ctx.globalAlpha = .35;
+    for (let i=0;i<11;i++) {
+      const x = ((i * 97.31) % (cssW + 40)) - 20;
+      const y = ((i * 173.7 + cameraY * .08) % (cssH + 120)) - 60;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.5 + (i%3), 0, TAU);
+      ctx.fillStyle = '#b9b9b3';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawPlatforms() {
+    for (const p of platforms) {
+      const sy = platformScreenY(p);
+      if (sy < -40 || sy > cssH + 50) continue;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,.10)';
+      ctx.shadowBlur = 16;
+      ctx.shadowOffsetY = 7;
+      if (p.type === 'boost') ctx.fillStyle = '#111111';
+      else if (p.type === 'crumble') ctx.fillStyle = '#e4e4df';
+      else ctx.fillStyle = '#ffffff';
+      roundedRect(p.x, sy - p.h, p.w, p.h, 7);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+
+      if (p.type === 'moving') {
+        ctx.fillStyle = 'rgba(17,17,17,.20)';
+        roundedRect(p.x + p.w/2 - 16, sy - p.h + 4, 32, 3, 2);
+        ctx.fill();
+      } else if (p.type === 'boost') {
+        ctx.strokeStyle = 'rgba(255,255,255,.85)';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        const cx = p.x + p.w/2;
+        ctx.beginPath();
+        ctx.moveTo(cx-8, sy-5); ctx.lineTo(cx, sy-11); ctx.lineTo(cx+8, sy-5);
+        ctx.stroke();
+      } else if (p.type === 'crumble') {
+        ctx.strokeStyle = 'rgba(17,17,17,.18)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x+p.w*.33, sy-p.h+2); ctx.lineTo(p.x+p.w*.43, sy-2);
+        ctx.moveTo(p.x+p.w*.64, sy-p.h+1); ctx.lineTo(p.x+p.w*.58, sy-3);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const a = 1 - p.age / p.life;
+      const sy = cssH - (p.y - cameraY);
+      ctx.globalAlpha = Math.max(0,a) * .55;
+      ctx.fillStyle = p.type === 'boost' ? '#111' : '#969690';
+      ctx.beginPath();
+      ctx.arc(p.x, sy, 2.2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPlayer() {
+    const sy = cssH - (player.y - cameraY);
+    const sq = player.squish;
+    const sx = 1 + sq * .12;
+    const syScale = 1 - sq * .14;
+    ctx.save();
+    ctx.translate(player.x, sy);
+    ctx.rotate(player.tilt);
+    ctx.scale(sx, syScale);
+    ctx.shadowColor = 'rgba(0,0,0,.18)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = '#111';
+    roundedRect(-23,-23,46,46,17);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+
+    const eyeShift = clamp(player.vx / 85, -2.2, 2.2);
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-8,-5,4.1,5,0,0,TAU); ctx.ellipse(8,-5,4.1,5,0,0,TAU); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(-8+eyeShift,-5,1.7,0,TAU); ctx.arc(8+eyeShift,-5,1.7,0,TAU); ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0,3,10,.28,Math.PI-.28); ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw() {
+    const sx = reduceMotion ? 0 : rand(-shake, shake);
+    const sy = reduceMotion ? 0 : rand(-shake, shake);
+    ctx.save();
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.translate(sx,sy);
+    drawBackground();
+    drawPlatforms();
+    drawParticles();
+    drawPlayer();
+    ctx.restore();
+  }
+
+  function frame(t) {
+    if (state !== 'playing') { draw(); return; }
+    let delta = Math.min(.035, (t - lastTime) / 1000 || 0);
+    lastTime = t;
+    accumulator += delta;
+    let loops = 0;
+    while (accumulator >= FIXED_DT && loops < 6) {
+      step(FIXED_DT);
+      accumulator -= FIXED_DT;
+      loops++;
+      if (state !== 'playing') break;
+    }
+    draw();
+    if (state === 'playing') raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', resize, { passive: true });
+  window.visualViewport?.addEventListener('resize', resize, { passive: true });
+  resize();
+  resetGame();
+  state = 'menu';
+  draw();
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
